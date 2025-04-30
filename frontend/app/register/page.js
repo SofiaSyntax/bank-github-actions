@@ -11,7 +11,11 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {
+      // Log the API URL to make sure it's correctly set
+  // console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
+
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users`, {    
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -20,16 +24,16 @@ export default function Register() {
     });
 
     if (res.ok) {
-      alert("Användare skapad!");
+      alert("User created!");
       router.push("/login");
     } else {
-      alert("Något gick fel.");
+      alert("Something went wrong.");
     }
   };
 
   return (
     <div className="flex flex-col items-center mt-18 h-screen">
-      <form
+      <form    
         onSubmit={handleSubmit}
         className="bg-gray-100 p-6 rounded-lg shadow-lg"
       >

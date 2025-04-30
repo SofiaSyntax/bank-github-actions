@@ -12,8 +12,11 @@ export default function Account() {
     if (savedToken) setToken(savedToken);
   }, []);
 
+  
+
   async function fetchBalance() {
     if (!token) return;
+    // console.log("Fetching balance with token:", token); 
 
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/me/accounts`, {
       method: "POST",
@@ -25,10 +28,12 @@ export default function Account() {
 
     if (res.ok) {
       const data = await res.json();
-      console.log("Saldo från backend:", data.balance); // för felsökning
+      // console.log("Balance from backend:", data.balance); 
       setBalance(data.balance);
     }
   }
+
+  
 
   useEffect(() => {
     if (token) {
@@ -38,8 +43,9 @@ export default function Account() {
 
   const handleDeposit = async () => {
     if (!amount) return;
+    // console.log("Token:", token, "Amount:", amount);
 
-    const res = await fetch(
+    const res = await fetch(  
       `${process.env.NEXT_PUBLIC_API_URL}/me/accounts/transactions`,
       {
         method: "POST",
@@ -48,14 +54,20 @@ export default function Account() {
         },
         body: JSON.stringify({ token, amount: parseFloat(amount) }),
       }
+      
     );
+    // console.log(res);
+    // console.log("Statu code:", res.status, "Response:", await res.text());
+
 
     if (res.ok) {
-      //   console.log("Insättningssvar från backend:", await res.json()); // för felsökning
+        // console.log("Deposit answer from backend:", await res.json()); 
+        // console.log("Calling fetchBalance after deposit...");
+
       await fetchBalance();
       setAmount("");
     } else {
-      alert("Sorry, something went wrong");
+      alert("Sorry, something went wrong"); 
     }
   };
 
@@ -65,6 +77,7 @@ export default function Account() {
       <div className="flex gap-2">
         <input
           type="number"
+          min="1"
           placeholder="Deposit amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}

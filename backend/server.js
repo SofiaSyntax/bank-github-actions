@@ -1,89 +1,197 @@
 import express from "express";
-import bodyParser from "body-parser";
 import cors from "cors";
+import mysql from "mysql2/promise";
 
 const app = express();
-const port = 3001;
+const port = 4001;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Generera engångslösenord
+// MySQL connection pool
+const pool = mysql.createPool({
+  user: "root",
+  password: "root",
+  host: "localhost",
+  database: "bank",
+  port: 8889,
+});
+
+// Test connection
+async function testConnection() {
+  try {
+    const [rows] = await pool.execute('SELECT 1');
+    console.log('MySQL connection is successful!');
+  } catch (error) {
+    console.error('Error connecting to the database:', error);
+  }
+}
+
+// Test database connection when starting the server
+testConnection();
+
+
+// Helper function to handle SQL queries
+async function query(sql, params) {
+  const [results] = await pool.execute(sql, params);
+  return results;
+}
+
+// Generate OTP
 function generateOTP() {
-  // Generera en sexsiffrig numerisk OTP
   const otp = Math.floor(100000 + Math.random() * 900000);
   return otp.toString();
 }
 
-// Din kod här. Skriv dina arrayer
-const users = [];
-const accounts = [];
-const sessions = [];
-
-// Din kod här. Skriv dina routes:
-
-// Skapa användare
-app.post("/users", (req, res) => {
+// Create user
+app.post("/users", async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ error: "Användarnamn och lösenord krävs" });
+    return res.status(400).json({ error: "Username and password must be provided" });
   }
 
-  const userId = users.length + 101;
-  users.push({ id: userId, username, password });
-  accounts.push({ id: accounts.length + 1, userId, amount: 0 });
+  try {
+    // Log the incoming request data to verify it  DEBUGGING
+    // console.log("Request Body:", req.body);
 
-  res.status(201).json({ message: "Användare skapad", userId });
+
+    // Insert the user into the users table
+    const result = await query(
+      "INSERT INTO users (username, password) VALUES (?, ?)",
+      [username, password]
+    );
+    // console.log(result)
+    
+    const userId = result.insertId;
+
+    //debugging 
+        // Log the result to verify the insert
+        // console.log("Inserted user with ID:", userId);
+
+
+    // Create an account for the user
+    const result2 = await query(
+      "INSERT INTO accounts (user_id, amount) VALUES (?, ?)",
+      [userId, 0] 
+    );
+    console.log(result2)
+
+    //debugging 
+        // Check if everything is working till this point
+    // console.log("Account created for user ID:", userId);
+
+
+    res.status(201).json({ message: "User created", userId });
+  } catch (error) {
+    res.status(500).json({ error: "Something went wrong when creating the user" });
+  }
 });
 
-// Logga in
-app.post("/sessions", (req, res) => {
+// Login
+app.post("/sessions", async (req, res) => {
   const { username, password } = req.body;
-  const user = users.find(
-    (u) => u.username === username && u.password === password
-  );
 
-  if (!user) {
-    return res.status(401).json({ error: "Fel användarnamn eller lösenord" });
+  try {
+    const users = await query("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: "Wrong username or password" });
+    }
+
+    const user = users[0];
+    const token = generateOTP();
+
+    // Store session in the database
+    await query(
+      "INSERT INTO sessions (user_id, token) VALUES (?, ?)",
+      [user.id, token]
+    );
+
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ error: "Something went wrong when logging in" });
   }
-
-  const token = generateOTP();
-  sessions.push({ userId: user.id, token });
-
-  res.json({ token });
 });
 
-// Hämta saldo
-app.post("/me/accounts", (req, res) => {
+// Get account balance
+app.post("/me/accounts", async (req, res) => {
   const { token } = req.body;
-  const session = sessions.find((s) => s.token === token);
 
-  if (!session) {
-    return res.status(401).json({ error: "Ogiltigt engångslösenord" });
+  console.log("TOKEN I /me/accounts:", token);
+
+
+  try {
+    const sessions = await query("SELECT * FROM sessions WHERE token = ?", [token]);
+    // console.log("Sessions hittade:", sessions);
+
+
+    if (sessions.length === 0) {
+      return res.status(401).json({ error: "Invalid one-time password" });
+    }
+
+    const session = sessions[0];
+    const [accounts] = await query("SELECT * FROM accounts WHERE user_id = ?", [session.user_id]);
+    // console.log("Accounts hittade:", accounts);
+
+
+    if (accounts.length === 0) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    
+    res.json({ balance: accounts.amount });
+  } catch (error) {
+    console.error("Error when fetching account balance:", error);
+
+    res.status(500).json({ error: "Something went wrong when fetching account balance" });
   }
-
-  const account = accounts.find((a) => a.userId === session.userId);
-  res.json({ balance: account.amount });
 });
 
-// Sätt in pengar
-app.post("/me/accounts/transactions", (req, res) => {
+// Deposit money
+app.post("/me/accounts/transactions", async (req, res) => {
   const { token, amount } = req.body;
-  const session = sessions.find((s) => s.token === token);
 
-  if (!session) {
-    return res.status(401).json({ error: "Ogiltigt engångslösenord" });
+//   console.log("Received token:", token);
+// console.log("Received amount:", amount);
+// console.log("Type of amount:", typeof amount);
+
+
+  try {
+    const sessions = await query("SELECT * FROM sessions WHERE token = ?", [token]);
+
+    if (sessions.length === 0) {
+      return res.status(401).json({ error: "Invalid one-time password" });
+    }
+
+    const session = sessions[0];
+    const accounts = await query("SELECT * FROM accounts WHERE user_id = ?", [session.user_id]);
+
+    if (accounts.length === 0) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const account = accounts[0];
+    const newBalance = parseFloat(account.amount) + parseFloat(amount);
+
+    // Update balance
+    await query("UPDATE accounts SET amount = ? WHERE id = ?", [newBalance, account.id]); 
+
+    res.json({ message: "Insättning lyckades", newBalance });
+  } catch (error) {
+    res.status(500).json({ error: "Somwthing went wrong during the deposit process" });
   }
-
-  const account = accounts.find((a) => a.userId === session.userId);
-  account.amount += amount;
-
-  res.json({ message: "Insättning lyckades", newBalance: account.amount });
 });
 
-// Starta servern
+
 app.listen(port, () => {
-  console.log(`Bankens backend körs på http://localhost:${port}`);
+  console.log(`Bankens backend runs on http://localhost:${port}`);
 });
+
+
+
+
+
+
+
