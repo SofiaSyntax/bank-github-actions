@@ -32,7 +32,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            cd /home/ubuntu/pm2-app
+            cd /home/ubuntu/pm2-app/frontend
             npm install
             npm run build || echo "No build step"
             pm2 delete ecosystem.config.js || true
