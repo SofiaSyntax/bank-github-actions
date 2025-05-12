@@ -33,6 +33,8 @@ jobs:
           port: 22
           script: |
             cd /home/ubuntu/pm2-app/frontend
+            touch .env
+            echo "NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}" >> .env
             npm install
             npm run build || echo "No build step"
             pm2 delete ecosystem.config.js || true
