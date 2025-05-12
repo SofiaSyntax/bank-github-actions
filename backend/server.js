@@ -1,6 +1,6 @@
-import express from "express";
-import cors from "cors";
-import mysql from "mysql2/promise";
+const express = require("express")
+const cors =  require("cors");
+const mysql = require("mysql2/promise");
 
 const app = express();
 const port = 4002;
